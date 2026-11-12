@@ -40,7 +40,7 @@ export default function Home() {
             </div>
           </div>
           <p className="text-sm font-bold text-primary uppercase tracking-wide">FactWise · Junior TPM Assessment</p>
-          <h1 className="font-headline-xl text-[32px] sm:text-[36px] font-extrabold text-on-surface mt-2">QuaranTrack</h1>
+          <h1 className="font-headline-xl text-[32px] sm:text-[36px] font-extrabold text-on-surface mt-2">FeverTrack</h1>
           <p className="text-on-surface-variant mt-2 max-w-xl mx-auto">
             Clinical vitals tracking &amp; discharge administration for the quarantine &amp; treatment facility. Choose a role to
             continue.

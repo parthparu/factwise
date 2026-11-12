@@ -36,7 +36,7 @@ export default function Header({ role }: { role: string }) {
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="font-headline-sm text-[15px] sm:text-[16px] text-on-surface font-extrabold uppercase tracking-tight whitespace-nowrap">
-                    QuaranTrack
+                    FeverTrack
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-[10px] font-bold tracking-wide whitespace-nowrap">
                     {occ.occupied}/{occ.capacity}-BED ACTIVE

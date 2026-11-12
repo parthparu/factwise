@@ -16,7 +16,7 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "QuaranTrack | FactWise TPM Assessment",
+  title: "FeverTrack | FactWise TPM Assessment",
   description: "Quarantine & treatment facility clinical tracker",
 };
 

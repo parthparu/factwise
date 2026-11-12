@@ -68,7 +68,7 @@ export default function AdminPage() {
 
   function exportDailyReport() {
     const lines = [
-      `QuaranTrack Daily Facility Report`,
+      `FeverTrack Daily Facility Report`,
       `Generated: ${todayStr()}`,
       ``,
       `Occupancy: ${occ.occupied} / ${occ.capacity} beds (${occ.remaining} free)`,
