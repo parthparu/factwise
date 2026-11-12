@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FeverTrack
 
-## Getting Started
+A prototype built for the **FactWise Junior TPM Campus Assessment** — a temperature tracking and discharge administration app for a virus quarantine & treatment facility.
 
-First, run the development server:
+**Live demo:** https://factwise-parth.vercel.app
+
+## The problem
+
+A quarantine facility with 74 beds needs nurses to measure every patient's temperature daily and doctors to visit every patient daily, but today it's all tracked on paper. Nobody can tell who's been measured, who's been visited, or who's ready to be discharged (patients are cleared after 3 consecutive fever-free days), and there's no way to track the facility's treatment success rate against an 85% benchmark.
+
+## What this app does
+
+Three role-based views, each scoped to what that role actually needs:
+
+- **Nurse** — record a patient's vitals (temperature plus SpO2, heart rate, blood pressure, respiratory rate, AVPU), see who still needs today's reading, and page the attending doctor directly on a fever spike.
+- **Doctor** — a daily rounds worklist, each patient's temperature trend and auto-computed fever-free streak, and discharge eligibility computed solely from the 3-day fever-free rule (per the brief — vitals beyond temperature are shown as informational context only, never gating).
+- **Admin** — an interactive 74-bed floor map, a doctor-approved discharge queue that requires a second admin sign-off before a bed is freed, a facility-wide audit log, and CSV/report exports.
+
+Business rules that aren't obvious from the screens (a missed day resets the fever-free streak rather than being skipped, discharge requires both doctor approval and admin confirmation, a bed can't be double-booked, etc.) are documented in the submitted assessment answers.
+
+Demo data persists in the browser's `localStorage`, seeded with ~45 patients across a mix of states (stable, fever-spiking, discharge-ready, overdue). Use "Reset demo data" on the home page to restore the seed.
+
+## Tech stack
+
+- [Next.js](https://nextjs.org) (App Router) + React 19 + TypeScript
+- Tailwind CSS v4
+- No backend — state lives in `localStorage` via a React context (`src/lib/store.tsx`)
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build   # production build
+npm run start   # run the production build
+npm run lint    # eslint
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project structure
 
-## Learn More
+```
+src/
+  app/
+    page.tsx          # role-selection landing page
+    nurse/             # nurse roster + per-patient vitals entry
+    doctor/             # doctor worklist + per-patient rounds/discharge
+    admin/              # bed census, KPIs, audit log, patient intake
+  components/           # shared Header, Badge
+  lib/
+    types.ts            # Patient, VitalsReading, DoctorVisit, PageEvent
+    constants.ts         # fever threshold, discharge rule, capacity, etc.
+    logic.ts              # pure business logic (streaks, eligibility, stats)
+    store.tsx              # React context + localStorage persistence + seed data
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deployed on [Vercel](https://vercel.com). Any push to `main` redeploys automatically.
