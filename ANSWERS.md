@@ -5,6 +5,8 @@
 
 ---
 
+**A note on scope:** the prototype goes beyond what the brief strictly asks for — it adds SpO2, heart rate, blood pressure, respiratory rate, an AVPU neuro scale, and a nurse→doctor escalation/paging workflow, on top of the core temperature-and-discharge tracking the brief describes. That extra surface area was a deliberate choice to make the demo more complete and realistic, not a claim that it's all MVP. If this were a real v1 scoping call, my answer to Q1 below is what I'd actually ship first — the vitals/escalation layer is the clearest "nice-to-have, prioritize later" bucket per the brief's own instruction.
+
 ## Q1 — User types, and which features/actions apply to which users
 
 The app's first version has three user types, matching the three distinct jobs described in the brief (measuring, treating, and administering):

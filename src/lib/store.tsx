@@ -1,10 +1,10 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { Patient, TempReading, DoctorVisit, PatientStatus } from "./types";
+import { Patient, VitalsReading, DoctorVisit, PatientStatus } from "./types";
 import { todayStr, isDischargeEligible } from "./logic";
 
-const STORAGE_KEY = "factwise-quarantine-data-v1";
+const STORAGE_KEY = "factwise-quarantine-data-v2";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
@@ -23,53 +23,95 @@ function seedPatients(): Patient[] {
       id: uid(),
       name: "Asha Rao",
       age: 34,
-      room: "101",
+      sex: "Female",
+      bed: "04",
+      assignedDoctor: "Dr. Ananya Krishnan",
       admittedDate: d(5),
       status: "active",
-      temps: [
-        { id: uid(), date: d(4), time: "08:00", value: 101.2, recordedBy: "Nurse Jane" },
-        { id: uid(), date: d(3), time: "08:00", value: 99.1, recordedBy: "Nurse Jane" },
-        { id: uid(), date: d(2), time: "08:10", value: 98.6, recordedBy: "Nurse Jane" },
-        { id: uid(), date: d(1), time: "08:05", value: 98.4, recordedBy: "Nurse Jane" },
+      vitals: [
+        { id: uid(), date: d(4), time: "08:00", tempF: 101.2, spo2: 93, hr: 102, rr: 20, bpSys: 128, bpDia: 82, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        { id: uid(), date: d(3), time: "08:00", tempF: 99.1, spo2: 95, hr: 88, rr: 18, bpSys: 122, bpDia: 78, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        { id: uid(), date: d(2), time: "08:10", tempF: 98.6, spo2: 97, hr: 80, rr: 16, bpSys: 118, bpDia: 76, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        { id: uid(), date: d(1), time: "08:05", tempF: 98.4, spo2: 98, hr: 78, rr: 16, bpSys: 116, bpDia: 74, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
       ],
       visits: [
-        { id: uid(), date: d(4), time: "11:00", doctorName: "Dr. Mehta" },
-        { id: uid(), date: d(2), time: "10:30", doctorName: "Dr. Mehta" },
+        { id: uid(), date: d(4), time: "11:00", doctorName: "Dr. Ananya Krishnan" },
+        { id: uid(), date: d(2), time: "10:30", doctorName: "Dr. Ananya Krishnan" },
       ],
+      pages: [],
     },
     {
       id: uid(),
       name: "Imran Khan",
       age: 51,
-      room: "102",
+      sex: "Male",
+      bed: "07",
+      assignedDoctor: "Dr. Vikram Nair",
       admittedDate: d(6),
       status: "active",
-      temps: [
-        { id: uid(), date: d(3), time: "09:00", value: 99.9, recordedBy: "Nurse Jane" },
-        { id: uid(), date: d(2), time: "09:00", value: 98.2, recordedBy: "Nurse Jane" },
-        { id: uid(), date: d(1), time: "09:00", value: 98.1, recordedBy: "Nurse Jane" },
-        { id: uid(), date: today, time: "07:45", value: 98.0, recordedBy: "Nurse Jane" },
+      vitals: [
+        { id: uid(), date: d(3), time: "09:00", tempF: 99.9, spo2: 96, hr: 90, rr: 18, bpSys: 124, bpDia: 80, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        { id: uid(), date: d(2), time: "09:00", tempF: 98.2, spo2: 97, hr: 82, rr: 16, bpSys: 120, bpDia: 78, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        { id: uid(), date: d(1), time: "09:00", tempF: 98.1, spo2: 98, hr: 79, rr: 15, bpSys: 118, bpDia: 76, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        { id: uid(), date: today, time: "07:45", tempF: 98.0, spo2: 98, hr: 77, rr: 15, bpSys: 117, bpDia: 75, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
       ],
-      visits: [{ id: uid(), date: d(1), time: "12:00", doctorName: "Dr. Mehta" }],
+      visits: [{ id: uid(), date: d(1), time: "12:00", doctorName: "Dr. Vikram Nair" }],
+      pages: [],
     },
     {
       id: uid(),
-      name: "Sofia Garcia",
+      name: "Meera Iyer",
       age: 29,
-      room: "103",
+      sex: "Female",
+      bed: "09",
+      assignedDoctor: "Dr. Vikram Nair",
       admittedDate: d(2),
       status: "active",
-      temps: [{ id: uid(), date: d(1), time: "08:30", value: 100.9, recordedBy: "Nurse Jane" }],
+      vitals: [
+        { id: uid(), date: d(1), time: "08:00", tempF: 99.3, spo2: 97, hr: 84, rr: 16, bpSys: 118, bpDia: 76, avpu: "A", recordedBy: "Nurse Priya Deshmukh" },
+        {
+          id: uid(),
+          date: today,
+          time: "09:14",
+          tempF: 101.5,
+          spo2: 94,
+          hr: 108,
+          rr: 22,
+          bpSys: 134,
+          bpDia: 88,
+          avpu: "A",
+          signs: ["Diaphoretic / Chills"],
+          notes:
+            "Patient shivering violently with rapid temperature rise over 4 hours. Complaining of retrosternal heaviness and moderate dyspnea.",
+          recordedBy: "Nurse Ritu Verma, RN",
+        },
+      ],
       visits: [],
+      pages: [
+        {
+          id: uid(),
+          date: today,
+          time: "09:15",
+          reason: "temp_spike",
+          notes: "Rose from 99.3°F to 101.5°F within hours. Visible chills, moderate dyspnea.",
+          raisedBy: "Nurse Ritu Verma, RN",
+          status: "paging",
+        },
+      ],
     },
   ];
 }
 
 type Store = {
   patients: Patient[];
-  addPatient: (p: Omit<Patient, "id" | "temps" | "visits" | "status">) => void;
-  addTemp: (patientId: string, reading: Omit<TempReading, "id">) => void;
+  addPatient: (p: Omit<Patient, "id" | "vitals" | "visits" | "pages" | "status">) => void;
+  addVitals: (
+    patientId: string,
+    reading: Omit<VitalsReading, "id">,
+    page?: { reason: string; notes?: string; raisedBy: string }
+  ) => void;
   addVisit: (patientId: string, visit: Omit<DoctorVisit, "id">) => void;
+  acknowledgePage: (patientId: string, pageId: string, doctorName: string) => void;
   setStatus: (patientId: string, status: PatientStatus, extra?: Partial<Patient>) => void;
   reset: () => void;
 };
@@ -111,13 +153,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addPatient: (p) =>
         setPatients((prev) => [
           ...prev,
-          { ...p, id: uid(), status: "active", temps: [], visits: [] },
+          { ...p, id: uid(), status: "active", vitals: [], visits: [], pages: [] },
         ]),
-      addTemp: (patientId, reading) =>
+      addVitals: (patientId, reading, page) =>
         setPatients((prev) =>
-          prev.map((p) =>
-            p.id === patientId ? { ...p, temps: [...p.temps, { ...reading, id: uid() }] } : p
-          )
+          prev.map((p) => {
+            if (p.id !== patientId) return p;
+            const updated: Patient = { ...p, vitals: [...p.vitals, { ...reading, id: uid() }] };
+            if (page) {
+              updated.pages = [
+                ...updated.pages,
+                {
+                  id: uid(),
+                  date: reading.date,
+                  time: reading.time,
+                  reason: page.reason,
+                  notes: page.notes,
+                  raisedBy: page.raisedBy,
+                  status: "paging",
+                },
+              ];
+            }
+            return updated;
+          })
         ),
       addVisit: (patientId, visit) =>
         setPatients((prev) =>
@@ -129,6 +187,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             return updated;
           })
+        ),
+      acknowledgePage: (patientId, pageId, doctorName) =>
+        setPatients((prev) =>
+          prev.map((p) =>
+            p.id !== patientId
+              ? p
+              : {
+                  ...p,
+                  pages: p.pages.map((pg) =>
+                    pg.id === pageId
+                      ? { ...pg, status: "acknowledged", acknowledgedAt: `${todayStr()} by ${doctorName}` }
+                      : pg
+                  ),
+                }
+          )
         ),
       setStatus: (patientId, status, extra) =>
         setPatients((prev) =>

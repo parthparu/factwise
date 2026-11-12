@@ -1,5 +1,16 @@
 import { Patient } from "./types";
-import { FEVER_THRESHOLD_F, DISCHARGE_FEVER_FREE_DAYS, CAPACITY, SUCCESS_BENCHMARK_PCT } from "./constants";
+import {
+  FEVER_THRESHOLD_F,
+  LOW_GRADE_FEVER_F,
+  DISCHARGE_FEVER_FREE_DAYS,
+  CAPACITY,
+  SUCCESS_BENCHMARK_PCT,
+  SPO2_TARGET,
+  SPO2_MILD_HYPOXIA,
+  HR_BASELINE,
+  HR_TACHYCARDIA,
+  RR_NORMAL_MAX,
+} from "./constants";
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -20,8 +31,8 @@ function addDays(dateStr: string, delta: number): string {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
 }
 
-export function tempsOnDate(patient: Patient, date: string) {
-  return patient.temps.filter((t) => t.date === date);
+export function vitalsOnDate(patient: Patient, date: string) {
+  return patient.vitals.filter((v) => v.date === date);
 }
 
 export function visitOnDate(patient: Patient, date: string) {
@@ -29,7 +40,7 @@ export function visitOnDate(patient: Patient, date: string) {
 }
 
 export function measuredToday(patient: Patient, date = todayStr()): boolean {
-  return tempsOnDate(patient, date).length > 0;
+  return vitalsOnDate(patient, date).length > 0;
 }
 
 export function visitedToday(patient: Patient, date = todayStr()): boolean {
@@ -37,33 +48,37 @@ export function visitedToday(patient: Patient, date = todayStr()): boolean {
 }
 
 export function hasFeverOn(patient: Patient, date: string): boolean {
-  const readings = tempsOnDate(patient, date);
+  const readings = vitalsOnDate(patient, date);
   if (readings.length === 0) return false;
-  return readings.some((t) => t.value >= FEVER_THRESHOLD_F);
+  return readings.some((v) => v.tempF >= FEVER_THRESHOLD_F);
+}
+
+export function latestVitals(patient: Patient) {
+  if (patient.vitals.length === 0) return null;
+  return [...patient.vitals].sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1))[0];
 }
 
 /**
  * Walk backward day by day from `date`. A day only counts toward the
- * fever-free streak if it was actually reported (has a temp reading) and
- * none of that day's readings hit the fever threshold. The first gap or
- * fever day stops the count.
+ * fever-free streak if it was actually reported (has a vitals reading) and
+ * none of that day's temperature readings hit the fever threshold. The
+ * first gap or fever day stops the count.
  */
 export function feverFreeStreak(patient: Patient, from = todayStr()) {
   let streak = 0;
   let cursor = from;
   let brokenByGap = false;
   for (let i = 0; i < 30; i++) {
-    const readings = tempsOnDate(patient, cursor);
+    const readings = vitalsOnDate(patient, cursor);
     if (readings.length === 0) {
       if (i === 0) {
-        // today not measured yet is fine, just don't count it; keep walking from yesterday
         cursor = addDays(cursor, -1);
         continue;
       }
       brokenByGap = true;
       break;
     }
-    if (readings.some((t) => t.value >= FEVER_THRESHOLD_F)) break;
+    if (readings.some((v) => v.tempF >= FEVER_THRESHOLD_F)) break;
     streak++;
     cursor = addDays(cursor, -1);
     if (cursor < patient.admittedDate) break;
@@ -101,6 +116,40 @@ export function mortalityStats(patients: Patient[]) {
   };
 }
 
-export function roomTaken(patients: Patient[], room: string, excludeId?: string) {
-  return activePatients(patients).some((p) => p.room === room && p.id !== excludeId);
+export function bedTaken(patients: Patient[], bed: string, excludeId?: string) {
+  return activePatients(patients).some((p) => p.bed === bed && p.id !== excludeId);
 }
+
+// ---- Vital classification helpers (UI badges) ----
+
+export function tempCategory(tempF: number): { label: string; tone: "ok" | "warn" | "bad" } {
+  if (tempF >= FEVER_THRESHOLD_F) return { label: "High Grade Fever (Spiking)", tone: "bad" };
+  if (tempF >= LOW_GRADE_FEVER_F) return { label: "Low Grade Fever / Sub-febrile", tone: "warn" };
+  return { label: "Afebrile / Within Normal Range", tone: "ok" };
+}
+
+export function spo2Category(spo2: number): { label: string; tone: "ok" | "warn" | "bad" } {
+  if (spo2 < SPO2_MILD_HYPOXIA) return { label: "Critical Hypoxia", tone: "bad" };
+  if (spo2 < SPO2_TARGET) return { label: "Mild Hypoxia", tone: "warn" };
+  return { label: "Normal Oxygenation", tone: "ok" };
+}
+
+export function hrCategory(hr: number): { label: string; tone: "ok" | "warn" | "bad" } {
+  if (hr >= HR_TACHYCARDIA) return { label: "Tachycardia", tone: "bad" };
+  if (hr < 50) return { label: "Bradycardia", tone: "warn" };
+  return { label: "Normal", tone: "ok" };
+}
+
+export function rrCategory(rr: number): { label: string; tone: "ok" | "warn" | "bad" } {
+  if (rr > RR_NORMAL_MAX) return { label: "Tachypnea", tone: "bad" };
+  if (rr < 12) return { label: "Bradypnea", tone: "warn" };
+  return { label: "Normal", tone: "ok" };
+}
+
+export function bpCategory(sys: number, dia: number): { label: string; tone: "ok" | "warn" | "bad" } {
+  if (sys >= 140 || dia >= 90) return { label: "Stage 2 Elevated", tone: "bad" };
+  if (sys >= 130 || dia >= 80) return { label: "Stage 1 Elevated", tone: "warn" };
+  return { label: "Normal", tone: "ok" };
+}
+
+export const hrBaseline = HR_BASELINE;
