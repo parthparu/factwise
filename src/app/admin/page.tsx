@@ -3,19 +3,87 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import { useStore } from "@/lib/store";
-import { occupancyStats, mortalityStats, activePatients, todayStr, bedTaken } from "@/lib/logic";
-import { SUCCESS_BENCHMARK_PCT } from "@/lib/constants";
+import { occupancyStats, mortalityStats, activePatients, todayStr, bedTaken, latestVitals, tempCategory } from "@/lib/logic";
+import { SUCCESS_BENCHMARK_PCT, CAPACITY } from "@/lib/constants";
 import { Patient } from "@/lib/types";
+
+const WINGS = [
+  { label: "Wing A", sub: "High Acuity Intake & Isolation", range: [1, 25] as const },
+  { label: "Wing B", sub: "Intermediate Stabilization", range: [26, 50] as const },
+  { label: "Wing C", sub: "Convalescent Clearance", range: [51, 74] as const },
+];
+
+type BedStatus = "open" | "stable" | "fever" | "discharge";
+
+function downloadText(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(v: string) {
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
 
 export default function AdminPage() {
   const { patients, addPatient, setStatus } = useStore();
   const [showAdmit, setShowAdmit] = useState(false);
+  const [admitBed, setAdmitBed] = useState<string | undefined>(undefined);
 
   const occ = occupancyStats(patients);
   const mort = mortalityStats(patients);
   const activeEscalations = patients.flatMap((p) => p.pages.filter((pg) => pg.status === "paging")).length;
-  const dischargeQueue = patients.filter((p) => p.status === "discharge_pending");
-  const active = activePatients(patients).sort((a, b) => a.bed.localeCompare(b.bed));
+  const active = activePatients(patients);
+
+  const occupantByBed = new Map<number, Patient>();
+  active.forEach((p) => {
+    const n = parseInt(p.bed, 10);
+    if (!Number.isNaN(n)) occupantByBed.set(n, p);
+  });
+
+  const [selectedBed, setSelectedBed] = useState<number>(() => active[0] ? parseInt(active[0].bed, 10) : 1);
+  const selectedOccupant = occupantByBed.get(selectedBed) ?? null;
+
+  function bedStatus(n: number): BedStatus {
+    const occ = occupantByBed.get(n);
+    if (!occ) return "open";
+    if (occ.status === "discharge_pending") return "discharge";
+    const v = latestVitals(occ);
+    if (v && tempCategory(v.tempF).tone === "bad") return "fever";
+    return "stable";
+  }
+
+  function exportRosterCSV() {
+    const header = ["Bed", "Name", "Age", "Sex", "Assigned Doctor", "Admitted", "Status"];
+    const rows = active
+      .sort((a, b) => a.bed.localeCompare(b.bed))
+      .map((p) => [p.bed, p.name, String(p.age), p.sex, p.assignedDoctor, p.admittedDate, p.status.replace("_", " ")]);
+    const csv = [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
+    downloadText(`quarantrack-roster-${todayStr()}.csv`, csv, "text/csv");
+  }
+
+  function exportDailyReport() {
+    const lines = [
+      `QuaranTrack Daily Facility Report`,
+      `Generated: ${todayStr()}`,
+      ``,
+      `Occupancy: ${occ.occupied} / ${occ.capacity} beds (${occ.remaining} free)`,
+      `Discharged: ${mort.discharged}`,
+      `Deceased: ${mort.deceased}`,
+      `Success rate: ${mort.successRate === null ? "n/a" : mort.successRate.toFixed(1) + "%"} (benchmark ${SUCCESS_BENCHMARK_PCT}%, ${mort.meetsBenchmark ? "met" : "not met"})`,
+      `Active escalations: ${activeEscalations}`,
+      ``,
+      `Active patients:`,
+      ...active
+        .sort((a, b) => a.bed.localeCompare(b.bed))
+        .map((p) => `  Bed ${p.bed} — ${p.name} (${p.sex}, ${p.age}) — ${p.assignedDoctor} — ${p.status.replace("_", " ")}`),
+    ];
+    downloadText(`quarantrack-daily-report-${todayStr()}.txt`, lines.join("\n"), "text/plain");
+  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -27,18 +95,42 @@ export default function AdminPage() {
             Bed Census &amp; KPI Benchmark
           </h1>
         </div>
-        <p className="font-body-sm text-[13px] text-on-surface-variant mb-6">Facility operations overview.</p>
+        <p className="font-body-sm text-[13px] text-on-surface-variant mb-6">Facility-wide isolation ward operations.</p>
 
-        <div className="grid sm:grid-cols-5 gap-3 mb-8">
-          <Stat label="Occupancy" value={`${occ.occupied} / ${occ.capacity}`} warn={occ.full} />
-          <Stat label="Discharged" value={String(mort.discharged)} />
-          <Stat label="Deceased" value={String(mort.deceased)} />
-          <Stat
-            label={`Success rate (≥${SUCCESS_BENCHMARK_PCT}%)`}
+        {/* KPI strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+          <KpiCard
+            label="Clinical Efficacy Target"
+            title="Survival ratio"
             value={mort.successRate === null ? "—" : `${mort.successRate.toFixed(1)}%`}
-            warn={mort.meetsBenchmark === false}
+            sub={`vs ${SUCCESS_BENCHMARK_PCT}.0% min standard`}
+            tone={mort.meetsBenchmark === false ? "bad" : "ok"}
+            footer={`${mort.discharged} discharged / ${mort.deceased} deceased`}
           />
-          <Stat label="Active escalations" value={String(activeEscalations)} warn={activeEscalations > 0} />
+          <KpiCard
+            label="Real-time Census"
+            title="Facility utilization"
+            value={`${occ.occupied}/${occ.capacity}`}
+            sub="Beds active"
+            tone={occ.full ? "bad" : occ.occupied / occ.capacity > 0.9 ? "warn" : "ok"}
+            footer={`${occ.remaining} beds free`}
+          />
+          <KpiCard
+            label="Bio-Throughput"
+            title="Cleared for discharge"
+            value={String(active.filter((p) => p.status === "discharge_pending").length)}
+            sub="In admin pipeline"
+            tone="ok"
+            footer="Doctor-approved, awaiting bed release"
+          />
+          <KpiCard
+            label="Clinical Alerts"
+            title="Active escalations"
+            value={String(activeEscalations)}
+            sub="Nurse → doctor pages open"
+            tone={activeEscalations > 0 ? "bad" : "ok"}
+            footer={activeEscalations > 0 ? "Awaiting physician acknowledgment" : "No open escalations"}
+          />
         </div>
 
         {occ.full && <Banner>Facility is at full capacity — new admissions are blocked until a bed frees up.</Banner>}
@@ -46,57 +138,172 @@ export default function AdminPage() {
           <Banner>Success rate has fallen below the {SUCCESS_BENCHMARK_PCT}% benchmark — flag for the head doctor.</Banner>
         )}
 
-        {dischargeQueue.length > 0 && (
-          <Section title="Ready to discharge (doctor-approved)" accent="border-secondary-fixed-dim bg-secondary-container/30">
-            {dischargeQueue.map((p) => (
-              <div key={p.id} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <div className="font-medium">
-                    {p.name} <span className="text-on-surface-variant font-normal">· Bed {p.bed}</span>
-                  </div>
-                  <div className="text-xs text-on-surface-variant">Admitted {p.admittedDate}</div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
+          {/* Floor matrix */}
+          <div className="lg:col-span-8 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-surface-container-highest flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="font-headline-sm text-[16px] text-on-surface font-bold">{CAPACITY}-Bed Floor Map</h2>
+              <div className="flex flex-wrap items-center gap-3 font-label-sm text-[11px] text-on-surface-variant">
+                <LegendDot color="bg-error" label="Fever spike" />
+                <LegendDot color="bg-primary" label="Stable" />
+                <LegendDot color="bg-secondary-fixed-dim" label="Discharge cleared" />
+                <LegendDot color="bg-surface-container-highest" label="Open bed" />
+              </div>
+            </div>
+
+            {WINGS.map((wing) => (
+              <div key={wing.label} className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 border-b border-surface-container-highest pb-1">
+                  <span className="px-2 py-0.5 rounded bg-primary text-white font-label-sm text-[10px] font-bold">{wing.label}</span>
+                  <span className="font-body-sm text-[12px] text-on-surface-variant">
+                    {wing.sub} · Beds {wing.range[0]}–{wing.range[1]}
+                  </span>
                 </div>
-                <button
-                  onClick={() => setStatus(p.id, "discharged", { dischargedDate: todayStr() })}
-                  className="text-sm font-bold px-3 py-1.5 rounded-lg bg-primary text-white hover:opacity-90"
-                >
-                  Confirm discharge
-                </button>
+                <div className="grid grid-cols-10 gap-1.5">
+                  {Array.from({ length: wing.range[1] - wing.range[0] + 1 }, (_, i) => wing.range[0] + i).map((n) => {
+                    const status = bedStatus(n);
+                    return (
+                      <button
+                        key={n}
+                        onClick={() => setSelectedBed(n)}
+                        title={`Bed ${n}: ${status}`}
+                        className={`h-9 rounded-md font-label-sm text-[11px] font-bold flex items-center justify-center transition-all ${
+                          selectedBed === n ? "ring-2 ring-primary" : ""
+                        } ${
+                          status === "fever"
+                            ? "bg-error text-white"
+                            : status === "discharge"
+                              ? "bg-secondary-fixed-dim text-on-secondary-fixed"
+                              : status === "stable"
+                                ? "bg-primary-container text-white"
+                                : "bg-surface-container-highest text-on-surface-variant"
+                        }`}
+                      >
+                        {n < 10 ? `0${n}` : n}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
-          </Section>
-        )}
+          </div>
 
-        <Section
-          title="Active patients"
-          accent="border-surface-container-highest bg-white"
-          action={
-            <button
-              onClick={() => setShowAdmit(true)}
-              disabled={occ.full}
-              className="text-sm font-bold px-3 py-1.5 rounded-lg bg-primary text-white disabled:opacity-40"
-            >
-              + Admit patient
-            </button>
-          }
-        >
-          {active.map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-2 text-sm">
-              <span>
-                {p.name} · Bed {p.bed}
-              </span>
-              <span className="text-on-surface-variant">{p.status.replace("_", " ")}</span>
+          {/* Right: inspector + directives */}
+          <div className="lg:col-span-4 flex flex-col gap-4">
+            <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-surface-container-highest flex flex-col gap-3">
+              {selectedOccupant ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-wider">Bed {selectedOccupant.bed}</span>
+                      <h3 className="font-headline-sm text-[15px] text-on-surface font-bold">{selectedOccupant.name}</h3>
+                      <p className="font-body-sm text-[12px] text-on-surface-variant">
+                        {selectedOccupant.sex}, {selectedOccupant.age} · {selectedOccupant.assignedDoctor}
+                      </p>
+                    </div>
+                    <StatusPill status={bedStatus(selectedBed)} />
+                  </div>
+                  {latestVitals(selectedOccupant) && (
+                    <div className="p-2.5 rounded-lg bg-surface-container-low font-label-sm text-[12px] text-on-surface-variant">
+                      Temp {latestVitals(selectedOccupant)!.tempF}°F · SpO2 {latestVitals(selectedOccupant)!.spo2 ?? "—"}% · HR{" "}
+                      {latestVitals(selectedOccupant)!.hr ?? "—"} bpm
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-2 pt-1">
+                    {selectedOccupant.status === "discharge_pending" && (
+                      <button
+                        onClick={() => setStatus(selectedOccupant.id, "discharged", { dischargedDate: todayStr() })}
+                        className="w-full h-10 rounded-lg bg-primary text-white font-bold text-[13px] flex items-center justify-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">verified</span>
+                        Confirm Discharge & Release Bed
+                      </button>
+                    )}
+                    <a
+                      href={`/doctor/${selectedOccupant.id}`}
+                      className="w-full h-10 rounded-lg bg-surface-container text-on-surface font-semibold text-[13px] flex items-center justify-center gap-2 border border-surface-container-highest"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-primary">monitor_heart</span>
+                      Open Clinical Chart
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-lg bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-bold text-[12px]">
+                      {selectedBed < 10 ? `0${selectedBed}` : selectedBed}
+                    </div>
+                    <div>
+                      <h3 className="font-headline-sm text-[15px] text-on-surface font-bold">Bed {selectedBed} — Open</h3>
+                      <p className="font-body-sm text-[12px] text-on-surface-variant">Ready for admission.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setAdmitBed(String(selectedBed).padStart(2, "0"));
+                      setShowAdmit(true);
+                    }}
+                    disabled={occ.full}
+                    className="w-full h-10 rounded-lg bg-primary text-white font-bold text-[13px] flex items-center justify-center gap-2 disabled:opacity-40"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">person_add</span>
+                    Admit to Bed {selectedBed}
+                  </button>
+                </>
+              )}
             </div>
-          ))}
-        </Section>
+
+            <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-surface-container-highest flex flex-col gap-2.5">
+              <h3 className="font-headline-sm text-[14px] text-on-surface font-bold border-b border-surface-container-highest pb-2 mb-1">
+                Administrative Directives
+              </h3>
+              <button
+                onClick={() => {
+                  setAdmitBed(undefined);
+                  setShowAdmit(true);
+                }}
+                disabled={occ.full}
+                className="w-full h-11 px-3 rounded-lg bg-primary text-white font-bold text-[13px] flex items-center justify-between disabled:opacity-40"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">person_add</span>
+                  Admit Patient
+                </span>
+              </button>
+              <button
+                onClick={exportDailyReport}
+                className="w-full h-11 px-3 rounded-lg bg-surface-container text-on-surface font-semibold text-[13px] flex items-center justify-between border border-surface-container-highest"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-tertiary">assessment</span>
+                  Generate Daily Report
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-tertiary">download</span>
+              </button>
+              <button
+                onClick={exportRosterCSV}
+                className="w-full h-11 px-3 rounded-lg bg-surface-container text-on-surface font-semibold text-[13px] flex items-center justify-between border border-surface-container-highest"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-tertiary">cloud_upload</span>
+                  Export Roster (CSV)
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-tertiary">download</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </main>
 
       {showAdmit && (
         <AdmitModal
           patients={patients}
+          initialBed={admitBed}
           onClose={() => setShowAdmit(false)}
           onSubmit={(p) => {
             addPatient(p);
+            setSelectedBed(parseInt(p.bed, 10) || selectedBed);
             setShowAdmit(false);
           }}
         />
@@ -105,35 +312,55 @@ export default function AdminPage() {
   );
 }
 
-function Section({
+function KpiCard({
+  label,
   title,
-  accent,
-  action,
-  children,
+  value,
+  sub,
+  tone,
+  footer,
 }: {
+  label: string;
   title: string;
-  accent: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
+  value: string;
+  sub: string;
+  tone: "ok" | "warn" | "bad";
+  footer: string;
 }) {
+  const valueColor = tone === "bad" ? "text-error" : tone === "warn" ? "text-on-surface" : "text-primary";
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-bold text-on-surface-variant">{title}</h2>
-        {action}
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-surface-container-highest flex flex-col justify-between h-32">
+      <div>
+        <span className="font-label-sm text-[10px] text-tertiary uppercase tracking-wider block">{label}</span>
+        <span className="font-headline-sm text-[14px] text-on-surface font-bold">{title}</span>
+        <div className="mt-1 flex items-baseline gap-1.5">
+          <span className={`font-metric-display text-[26px] font-extrabold ${valueColor}`}>{value}</span>
+          <span className="font-label-sm text-[10px] text-on-surface-variant">{sub}</span>
+        </div>
       </div>
-      <div className={`rounded-xl border divide-y divide-surface-container-highest ${accent}`}>{children}</div>
+      <div className="text-on-surface-variant font-label-sm text-[10px] border-t border-surface-container-highest pt-1.5">{footer}</div>
     </div>
   );
 }
 
-function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <div className="rounded-xl border border-surface-container-highest bg-white p-3">
-      <div className="text-xs text-on-surface-variant">{label}</div>
-      <div className={`text-lg font-bold ${warn ? "text-error" : "text-on-surface"}`}>{value}</div>
+    <div className="flex items-center gap-1">
+      <span className={`w-2.5 h-2.5 rounded-sm ${color}`} />
+      <span>{label}</span>
     </div>
   );
+}
+
+function StatusPill({ status }: { status: BedStatus }) {
+  const map: Record<BedStatus, { label: string; cls: string }> = {
+    fever: { label: "Fever Spike", cls: "bg-error-container text-on-error-container" },
+    discharge: { label: "Discharge Cleared", cls: "bg-secondary-container text-on-secondary-container" },
+    stable: { label: "Stable", cls: "bg-primary-container text-white" },
+    open: { label: "Open", cls: "bg-surface-container-highest text-on-surface-variant" },
+  };
+  const m = map[status];
+  return <span className={`px-2 py-0.5 rounded-full font-label-sm text-[10px] font-bold ${m.cls}`}>{m.label}</span>;
 }
 
 function Banner({ children }: { children: React.ReactNode }) {
@@ -142,17 +369,19 @@ function Banner({ children }: { children: React.ReactNode }) {
 
 function AdmitModal({
   patients,
+  initialBed,
   onClose,
   onSubmit,
 }: {
   patients: Patient[];
+  initialBed?: string;
   onClose: () => void;
   onSubmit: (p: Omit<Patient, "id" | "vitals" | "visits" | "pages" | "status">) => void;
 }) {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [sex, setSex] = useState<"Female" | "Male" | "Other">("Female");
-  const [bed, setBed] = useState("");
+  const [bed, setBed] = useState(initialBed ?? "");
   const [assignedDoctor, setAssignedDoctor] = useState("");
 
   const ageNum = parseInt(age, 10);
