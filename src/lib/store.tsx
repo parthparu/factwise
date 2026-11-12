@@ -45,7 +45,7 @@ function seedPatients(): Patient[] {
     ...extra,
   });
 
-  return [
+  const curated: Patient[] = [
     {
       id: uid(),
       name: "Asha Rao",
@@ -317,6 +317,82 @@ function seedPatients(): Patient[] {
       pages: [],
     },
   ];
+
+  // Bulk-fill the rest of the ward so occupancy sits around 60% of the
+  // 74-bed capacity (~44 beds), spread across all three wings, with a
+  // repeating mix of clinical states for a realistic-looking census.
+  const BULK_NAMES: { name: string; age: number; sex: "Female" | "Male" }[] = [
+    { name: "Nikhil Chawla", age: 36, sex: "Male" },
+    { name: "Ritika Bhatt", age: 25, sex: "Female" },
+    { name: "Manish Kulkarni", age: 52, sex: "Male" },
+    { name: "Tanvi Agarwal", age: 30, sex: "Female" },
+    { name: "Suresh Pillai", age: 58, sex: "Male" },
+    { name: "Shruti Nambiar", age: 27, sex: "Female" },
+    { name: "Deepak Chauhan", age: 44, sex: "Male" },
+    { name: "Meenal Deshpande", age: 35, sex: "Female" },
+    { name: "Yash Trivedi", age: 23, sex: "Male" },
+    { name: "Nikita Saxena", age: 40, sex: "Female" },
+    { name: "Harish Bhatia", age: 61, sex: "Male" },
+    { name: "Swati Rane", age: 32, sex: "Female" },
+    { name: "Mohit Oberoi", age: 48, sex: "Male" },
+    { name: "Preeti Chandra", age: 29, sex: "Female" },
+    { name: "Gaurav Thakur", age: 37, sex: "Male" },
+    { name: "Vidya Subramaniam", age: 55, sex: "Female" },
+    { name: "Ankit Bedi", age: 26, sex: "Male" },
+    { name: "Lata Khanna", age: 63, sex: "Female" },
+    { name: "Sanjay Dutta", age: 46, sex: "Male" },
+    { name: "Juhi Sinha", age: 33, sex: "Female" },
+    { name: "Vivek Bajaj", age: 50, sex: "Male" },
+    { name: "Ira Ganguly", age: 24, sex: "Female" },
+    { name: "Naveen Rawat", age: 42, sex: "Male" },
+    { name: "Shalini D'Souza", age: 31, sex: "Female" },
+    { name: "Rajesh Mittal", age: 57, sex: "Male" },
+    { name: "Komal Vyas", age: 28, sex: "Female" },
+    { name: "Abhishek Tandon", age: 39, sex: "Male" },
+    { name: "Varsha Pandey", age: 47, sex: "Female" },
+    { name: "Imtiaz Ansari", age: 34, sex: "Male" },
+  ];
+  const BULK_BEDS = ["15", "18", "19", "20", "21", "22", "23", "24", "25", ...Array.from({ length: 20 }, (_, i) => String(26 + i))];
+
+  const bulk: Patient[] = BULK_NAMES.map((person, i) => {
+    const doctor = DOCTORS[i % DOCTORS.length];
+    const nurse = NURSES[i % NURSES.length];
+    const pattern = i % 4;
+    let vitals: VitalsReading[];
+    let status: PatientStatus = "active";
+
+    if (pattern === 0) {
+      // Fully fever-free for 3+ days — discharge eligible.
+      vitals = [v(3, 98.6, nurse), v(2, 98.4, nurse), v(1, 98.3, nurse), v(0, 98.2, nurse, { time: "07:40" })];
+    } else if (pattern === 1) {
+      // Active fever spike today.
+      vitals = [v(1, 99.4, nurse), v(0, 100.9, nurse, { time: "08:30", spo2: 94, hr: 98 })];
+    } else if (pattern === 2) {
+      // Overdue — nothing recorded today.
+      vitals = [v(2, 99.0, nurse), v(1, 98.6, nurse)];
+    } else {
+      // Mid-treatment, stable but not yet at the 3-day mark.
+      vitals = [v(1, 98.7, nurse), v(0, 98.5, nurse, { time: "08:50" })];
+    }
+
+    if (pattern === 0 && i % 8 === 0) status = "discharge_pending";
+
+    return {
+      id: uid(),
+      name: person.name,
+      age: person.age,
+      sex: person.sex,
+      bed: BULK_BEDS[i],
+      assignedDoctor: doctor,
+      admittedDate: d(pattern === 2 ? 2 : 3),
+      status,
+      vitals,
+      visits: status === "discharge_pending" || pattern === 0 ? [visit(1, doctor)] : [],
+      pages: [],
+    };
+  });
+
+  return [...curated, ...bulk];
 }
 
 type Store = {
