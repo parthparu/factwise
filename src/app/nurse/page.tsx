@@ -4,13 +4,15 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Badge from "@/components/Badge";
 import { useStore } from "@/lib/store";
-import { activePatients, measuredToday, latestVitals, tempCategory } from "@/lib/logic";
+import { activePatients, measuredToday, latestVitals, tempCategory, isVitalsOverdue } from "@/lib/logic";
 import { Patient } from "@/lib/types";
 
 export default function NursePage() {
   const { patients } = useStore();
   const list = activePatients(patients).sort((a, b) => a.bed.localeCompare(b.bed));
-  const pending = list.filter((p) => !measuredToday(p));
+  const pendingAll = list.filter((p) => !measuredToday(p));
+  const overdue = pendingAll.filter((p) => isVitalsOverdue(p));
+  const pending = pendingAll.filter((p) => !isVitalsOverdue(p));
   const done = list.filter((p) => measuredToday(p));
   const spiking = list.filter((p) => {
     const v = latestVitals(p);
@@ -28,7 +30,8 @@ export default function NursePage() {
           </h1>
         </div>
         <p className="font-body-sm text-[13px] text-on-surface-variant mb-6">
-          {pending.length} of {list.length} active patients still need today&apos;s vitals recorded.
+          {pendingAll.length} of {list.length} active patients still need today&apos;s vitals recorded.
+          {overdue.length > 0 && <span className="text-error font-semibold"> {overdue.length} overdue (past noon, unmeasured).</span>}
           {spiking.length > 0 && <span className="text-error font-semibold"> {spiking.length} patient(s) currently spiking.</span>}
         </p>
 
@@ -78,6 +81,14 @@ export default function NursePage() {
           })}
         </div>
 
+        {overdue.length > 0 && (
+          <Section title="Overdue — no vitals since before noon" accent="border-error/40 bg-error-container/30">
+            {overdue.map((p) => (
+              <PatientRow key={p.id} patient={p} warn overdue />
+            ))}
+          </Section>
+        )}
+
         {pending.length > 0 && (
           <Section title="Needs vitals today" accent="border-amber-300 bg-amber-50/60">
             {pending.map((p) => (
@@ -114,14 +125,14 @@ function Section({
   );
 }
 
-function PatientRow({ patient, warn }: { patient: Patient; warn: boolean }) {
+function PatientRow({ patient, warn, overdue }: { patient: Patient; warn: boolean; overdue?: boolean }) {
   const last = [...patient.vitals].slice(-3).reverse();
   return (
     <Link href={`/nurse/${patient.id}`} className="flex items-center justify-between px-4 py-3 hover:bg-surface-container-low">
       <div>
         <div className="font-medium flex items-center gap-2">
           {patient.name} <span className="text-on-surface-variant font-normal">· Bed {patient.bed}</span>
-          {!measuredToday(patient) && <Badge label="No vitals today" tone="warn" />}
+          {overdue ? <Badge label="Overdue" tone="bad" /> : !measuredToday(patient) && <Badge label="No vitals today" tone="warn" />}
         </div>
         <div className="text-xs text-on-surface-variant mt-0.5 flex gap-2 flex-wrap">
           {last.length === 0 && <span>No readings yet</span>}
@@ -134,7 +145,7 @@ function PatientRow({ patient, warn }: { patient: Patient; warn: boolean }) {
       </div>
       <span
         className={`text-sm font-medium px-3 py-1.5 rounded-lg ${
-          warn ? "bg-primary text-white" : "bg-surface-container-low text-on-surface"
+          overdue ? "bg-error text-white" : warn ? "bg-primary text-white" : "bg-surface-container-low text-on-surface"
         }`}
       >
         {warn ? "Record vitals" : "Add reading"}

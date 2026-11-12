@@ -114,6 +114,7 @@ type Store = {
     page?: { reason: string; notes?: string; raisedBy: string }
   ) => void;
   addVisit: (patientId: string, visit: Omit<DoctorVisit, "id">) => void;
+  deleteVitals: (patientId: string, vitalsId: string) => void;
   acknowledgePage: (patientId: string, pageId: string, doctorName: string) => void;
   setStatus: (patientId: string, status: PatientStatus, extra?: Partial<Patient>) => void;
   reset: () => void;
@@ -197,6 +198,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             return updated;
           })
+        ),
+      deleteVitals: (patientId, vitalsId) =>
+        setPatients((prev) =>
+          prev.map((p) => (p.id !== patientId ? p : { ...p, vitals: p.vitals.filter((v) => v.id !== vitalsId) }))
         ),
       acknowledgePage: (patientId, pageId, doctorName) =>
         setPatients((prev) =>

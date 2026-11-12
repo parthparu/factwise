@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import { useStore } from "@/lib/store";
-import { occupancyStats, mortalityStats, activePatients, todayStr, bedTaken, latestVitals, tempCategory } from "@/lib/logic";
+import { occupancyStats, mortalityStats, activePatients, todayStr, bedTaken, latestVitals, tempCategory, buildAuditLog, AuditEvent } from "@/lib/logic";
 import { SUCCESS_BENCHMARK_PCT, CAPACITY } from "@/lib/constants";
 import { Patient } from "@/lib/types";
 
@@ -33,6 +33,8 @@ export default function AdminPage() {
   const { patients, addPatient, setStatus } = useStore();
   const [showAdmit, setShowAdmit] = useState(false);
   const [admitBed, setAdmitBed] = useState<string | undefined>(undefined);
+  const [showAudit, setShowAudit] = useState(false);
+  const auditLog = buildAuditLog(patients);
 
   const occ = occupancyStats(patients);
   const mort = mortalityStats(patients);
@@ -313,9 +315,39 @@ export default function AdminPage() {
                 </span>
                 <span className="material-symbols-outlined text-[18px] text-tertiary">download</span>
               </button>
+              <button
+                onClick={() => setShowAudit((s) => !s)}
+                className="w-full h-11 px-3 rounded-lg bg-surface-container text-on-surface font-semibold text-[13px] flex items-center justify-between border border-surface-container-highest"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-tertiary">history_toggle_off</span>
+                  {showAudit ? "Hide Audit Log" : "View Audit Log"}
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-tertiary">{showAudit ? "expand_less" : "expand_more"}</span>
+              </button>
             </div>
           </div>
         </div>
+
+        {showAudit && (
+          <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-surface-container-highest mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-headline-sm text-[15px] text-on-surface font-bold flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[18px] text-primary">history_toggle_off</span>
+                Audit Log
+              </h2>
+              <span className="font-label-sm text-[10px] text-on-surface-variant">
+                Every logged write across the facility, newest first — who did what, and when.
+              </span>
+            </div>
+            <div className="flex flex-col divide-y divide-surface-container-highest max-h-96 overflow-y-auto">
+              {auditLog.slice(0, 50).map((e) => (
+                <AuditRow key={e.id} event={e} />
+              ))}
+              {auditLog.length === 0 && <p className="text-sm text-on-surface-variant py-3">No activity logged yet.</p>}
+            </div>
+          </div>
+        )}
       </main>
 
       {showAdmit && (
@@ -408,6 +440,31 @@ function StatusPill({ status }: { status: BedStatus }) {
 
 function Banner({ children }: { children: React.ReactNode }) {
   return <div className="rounded-xl border border-error/30 bg-error-container/40 text-on-error-container text-sm px-4 py-3 mb-6">{children}</div>;
+}
+
+const AUDIT_ICON: Record<AuditEvent["type"], string> = {
+  vitals: "device_thermostat",
+  visit: "stethoscope",
+  page_raised: "emergency",
+  page_acknowledged: "check_circle",
+  admitted: "person_add",
+  discharged: "verified",
+  deceased: "report",
+};
+
+function AuditRow({ event }: { event: AuditEvent }) {
+  return (
+    <div className="flex items-center gap-3 py-2 text-[12px]">
+      <span className="material-symbols-outlined text-[16px] text-tertiary flex-shrink-0">{AUDIT_ICON[event.type]}</span>
+      <span className="text-on-surface-variant w-[110px] flex-shrink-0">
+        {event.date} {event.time}
+      </span>
+      <span className="text-on-surface flex-1 truncate">
+        <span className="font-semibold">{event.patientName}</span> (Bed {event.bed}) — {event.label}
+      </span>
+      <span className="text-on-surface-variant flex-shrink-0">{event.by}</span>
+    </div>
+  );
 }
 
 function AdmitModal({

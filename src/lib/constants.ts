@@ -12,6 +12,12 @@ export const HR_TACHYCARDIA = 100;
 
 export const RR_NORMAL_MAX = 20;
 
+// Hour-of-day (local, 24h) after which an undone daily task counts as
+// "overdue" rather than just "not done yet" — mirrors the facility's stated
+// problem of patients going unmeasured / unvisited for a whole day.
+export const VITALS_OVERDUE_HOUR = 12; // noon
+export const VISIT_OVERDUE_HOUR = 16; // 4pm
+
 export const OBSERVED_SIGNS = [
   "Diaphoretic / Chills",
   "Productive Cough",

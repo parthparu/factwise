@@ -24,7 +24,7 @@ const TEMP_PRESETS = [97.0, 98.6, 99.5, 100.4, 101.5, 103.0];
 export default function NurseVitalsEntryPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { patients, addVitals } = useStore();
+  const { patients, addVitals, deleteVitals } = useStore();
   const patient = patients.find((p) => p.id === id);
 
   const last = patient ? latestVitals(patient) : null;
@@ -461,17 +461,33 @@ export default function NurseVitalsEntryPage() {
                   </span>
                 </div>
                 <div className="flex flex-col divide-y divide-surface-container-highest/60 max-h-80 overflow-y-auto">
-                  {[...patient.vitals].reverse().map((v) => (
-                    <div key={v.id} className="flex items-center justify-between py-2 text-[12px]">
-                      <span className="text-on-surface-variant">
-                        {v.date} {v.time}
-                      </span>
-                      <span className={tempCategory(v.tempF).tone === "bad" ? "text-error font-bold" : "text-on-surface font-semibold"}>
-                        {v.tempF}°F
-                      </span>
-                      <span className="text-on-surface-variant">{v.recordedBy}</span>
-                    </div>
-                  ))}
+                  {[...patient.vitals].reverse().map((v, i) => {
+                    const isUndoable = i === 0 && v.date === todayStr();
+                    return (
+                      <div key={v.id} className="flex items-center justify-between py-2 text-[12px] gap-2">
+                        <span className="text-on-surface-variant">
+                          {v.date} {v.time}
+                        </span>
+                        <span className={tempCategory(v.tempF).tone === "bad" ? "text-error font-bold" : "text-on-surface font-semibold"}>
+                          {v.tempF}°F
+                        </span>
+                        <span className="text-on-surface-variant">{v.recordedBy}</span>
+                        {isUndoable && (
+                          <button
+                            onClick={() => {
+                              if (confirm("Remove this reading? This is only possible for the most recent entry, same day.")) {
+                                deleteVitals(patient.id, v.id);
+                              }
+                            }}
+                            className="text-error text-[11px] font-bold flex items-center gap-0.5 hover:underline flex-shrink-0"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">undo</span>
+                            Undo
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                   {patient.vitals.length === 0 && <p className="text-on-surface-variant text-sm py-3">No readings yet.</p>}
                 </div>
               </div>

@@ -16,6 +16,7 @@ import {
   hrCategory,
   todayStr,
   isDischargeEligible,
+  isVisitOverdue,
 } from "@/lib/logic";
 import { DISCHARGE_FEVER_FREE_DAYS, FEVER_THRESHOLD_F } from "@/lib/constants";
 import { Patient } from "@/lib/types";
@@ -201,6 +202,7 @@ function WorklistCard({ patient, selected, onSelect }: { patient: Patient; selec
   const cat = v ? tempCategory(v.tempF) : null;
   const eligible = isDischargeEligible(patient);
   const measured = measuredToday(patient);
+  const overdue = isVisitOverdue(patient);
 
   return (
     <div
@@ -240,7 +242,8 @@ function WorklistCard({ patient, selected, onSelect }: { patient: Patient; selec
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2 flex-wrap">
+        {overdue && <Badge label="Visit overdue" tone="bad" />}
         {!measured && <Badge label="No vitals today" tone="warn" />}
         <Link href={`/doctor/${patient.id}`} onClick={(e) => e.stopPropagation()} className="ml-auto text-[13px] font-bold text-primary flex items-center gap-1">
           Open full chart <span className="material-symbols-outlined text-[16px]">arrow_forward</span>

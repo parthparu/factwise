@@ -10,6 +10,8 @@ import {
   HR_BASELINE,
   HR_TACHYCARDIA,
   RR_NORMAL_MAX,
+  VITALS_OVERDUE_HOUR,
+  VISIT_OVERDUE_HOUR,
 } from "./constants";
 
 function pad2(n: number): string {
@@ -118,6 +120,68 @@ export function mortalityStats(patients: Patient[]) {
 
 export function bedTaken(patients: Patient[], bed: string, excludeId?: string) {
   return activePatients(patients).some((p) => p.bed === bed && p.id !== excludeId);
+}
+
+// ---- Overdue escalation ----
+// A task that's simply "not done yet" this morning isn't a problem; one
+// that's still undone by the cutoff hour is exactly the facility's stated
+// pain point ("sometimes a patient's temperature is not measured at all").
+
+export function isVitalsOverdue(patient: Patient, now = new Date()): boolean {
+  return patient.status === "active" && !measuredToday(patient) && now.getHours() >= VITALS_OVERDUE_HOUR;
+}
+
+export function isVisitOverdue(patient: Patient, now = new Date()): boolean {
+  return patient.status === "active" && !visitedToday(patient) && now.getHours() >= VISIT_OVERDUE_HOUR;
+}
+
+// ---- Audit log ----
+// Flattens every write across every patient into one chronological feed, so
+// it's always answerable who recorded what and when — the facility's other
+// stated pain point ("no one knows which patients have had their
+// temperature measured").
+
+export type AuditEvent = {
+  id: string;
+  date: string;
+  time: string;
+  type: "vitals" | "visit" | "page_raised" | "page_acknowledged" | "admitted" | "discharged" | "deceased";
+  label: string;
+  by: string;
+  patientName: string;
+  bed: string;
+};
+
+export function buildAuditLog(patients: Patient[]): AuditEvent[] {
+  const events: AuditEvent[] = [];
+  for (const p of patients) {
+    for (const v of p.vitals) {
+      events.push({ id: v.id, date: v.date, time: v.time, type: "vitals", label: `Logged ${v.tempF}°F`, by: v.recordedBy, patientName: p.name, bed: p.bed });
+    }
+    for (const visit of p.visits) {
+      events.push({ id: visit.id, date: visit.date, time: visit.time, type: "visit", label: "Doctor visit logged", by: visit.doctorName, patientName: p.name, bed: p.bed });
+    }
+    for (const pg of p.pages) {
+      events.push({ id: pg.id + "-raised", date: pg.date, time: pg.time, type: "page_raised", label: `Escalation raised (${pg.reason.replace("_", " ")})`, by: pg.raisedBy, patientName: p.name, bed: p.bed });
+      if (pg.status === "acknowledged" && pg.acknowledgedAt) {
+        events.push({ id: pg.id + "-ack", date: pg.date, time: pg.time, type: "page_acknowledged", label: "Escalation acknowledged", by: pg.acknowledgedAt, patientName: p.name, bed: p.bed });
+      }
+    }
+    events.push({ id: p.id + "-admit", date: p.admittedDate, time: "00:00", type: "admitted", label: "Admitted", by: "Admin", patientName: p.name, bed: p.bed });
+    if (p.dischargedDate && (p.status === "discharged" || p.status === "deceased")) {
+      events.push({
+        id: p.id + "-close",
+        date: p.dischargedDate,
+        time: "23:59",
+        type: p.status === "deceased" ? "deceased" : "discharged",
+        label: p.status === "deceased" ? "Marked deceased" : "Discharged",
+        by: p.status === "deceased" ? "Doctor" : "Admin",
+        patientName: p.name,
+        bed: p.bed,
+      });
+    }
+  }
+  return events.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
 }
 
 // ---- Vital classification helpers (UI badges) ----
