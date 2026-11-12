@@ -106,6 +106,8 @@ export default function AdminPage() {
             sub={`vs ${SUCCESS_BENCHMARK_PCT}.0% min standard`}
             tone={mort.meetsBenchmark === false ? "bad" : "ok"}
             footer={`${mort.discharged} discharged / ${mort.deceased} deceased`}
+            progress={mort.successRate ?? undefined}
+            threshold={SUCCESS_BENCHMARK_PCT}
           />
           <KpiCard
             label="Real-time Census"
@@ -114,6 +116,7 @@ export default function AdminPage() {
             sub="Beds active"
             tone={occ.full ? "bad" : occ.occupied / occ.capacity > 0.9 ? "warn" : "ok"}
             footer={`${occ.remaining} beds free`}
+            progress={(occ.occupied / occ.capacity) * 100}
           />
           <KpiCard
             label="Bio-Throughput"
@@ -159,16 +162,19 @@ export default function AdminPage() {
                     {wing.sub} · Beds {wing.range[0]}–{wing.range[1]}
                   </span>
                 </div>
-                <div className="grid grid-cols-10 gap-1.5">
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
                   {Array.from({ length: wing.range[1] - wing.range[0] + 1 }, (_, i) => wing.range[0] + i).map((n) => {
                     const status = bedStatus(n);
+                    const occ = occupantByBed.get(n);
+                    const v = occ ? latestVitals(occ) : null;
+                    const doctorLabel = occ ? "Dr. " + occ.assignedDoctor.split(" ").pop() : null;
                     return (
                       <button
                         key={n}
                         onClick={() => setSelectedBed(n)}
-                        title={`Bed ${n}: ${status}`}
-                        className={`h-9 rounded-md font-label-sm text-[11px] font-bold flex items-center justify-center transition-all ${
-                          selectedBed === n ? "ring-2 ring-primary" : ""
+                        title={occ ? `Bed ${n}: ${occ.name} — ${status}` : `Bed ${n}: open`}
+                        className={`h-16 rounded-lg p-1.5 flex flex-col justify-between items-center shadow-sm transition-all hover:scale-[1.03] ${
+                          selectedBed === n ? "ring-2 ring-primary ring-offset-1" : ""
                         } ${
                           status === "fever"
                             ? "bg-error text-white"
@@ -179,7 +185,17 @@ export default function AdminPage() {
                                 : "bg-surface-container-highest text-on-surface-variant"
                         }`}
                       >
-                        {n < 10 ? `0${n}` : n}
+                        <span className="font-label-sm text-[10px] font-bold opacity-90">{n < 10 ? `0${n}` : n}</span>
+                        {occ ? (
+                          <>
+                            <span className="font-label-sm text-[9px] font-semibold leading-tight truncate w-full text-center">{doctorLabel}</span>
+                            <span className="font-label-sm text-[9px] font-mono bg-black/15 px-1 rounded">
+                              {status === "fever" ? `${v?.tempF}°F` : status === "discharge" ? "cleared" : v?.spo2 != null ? `${v.spo2}%` : "—"}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="font-label-sm text-[9px]">Open</span>
+                        )}
                       </button>
                     );
                   })}
@@ -319,6 +335,8 @@ function KpiCard({
   sub,
   tone,
   footer,
+  progress,
+  threshold,
 }: {
   label: string;
   title: string;
@@ -326,10 +344,13 @@ function KpiCard({
   sub: string;
   tone: "ok" | "warn" | "bad";
   footer: string;
+  progress?: number;
+  threshold?: number;
 }) {
   const valueColor = tone === "bad" ? "text-error" : tone === "warn" ? "text-on-surface" : "text-primary";
+  const barColor = tone === "bad" ? "bg-error" : "bg-primary";
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-surface-container-highest flex flex-col justify-between h-32">
+    <div className="bg-white p-4 rounded-xl shadow-sm border border-surface-container-highest flex flex-col justify-between h-36">
       <div>
         <span className="font-label-sm text-[10px] text-tertiary uppercase tracking-wider block">{label}</span>
         <span className="font-headline-sm text-[14px] text-on-surface font-bold">{title}</span>
@@ -337,6 +358,12 @@ function KpiCard({
           <span className={`font-metric-display text-[26px] font-extrabold ${valueColor}`}>{value}</span>
           <span className="font-label-sm text-[10px] text-on-surface-variant">{sub}</span>
         </div>
+        {progress != null && (
+          <div className="relative w-full h-2 bg-surface-container-highest rounded-full overflow-hidden mt-2">
+            <div className={`absolute left-0 top-0 bottom-0 ${barColor} rounded-full transition-all`} style={{ width: `${Math.min(100, progress)}%` }} />
+            {threshold != null && <div className="absolute top-0 bottom-0 w-0.5 bg-on-surface/40" style={{ left: `${threshold}%` }} />}
+          </div>
+        )}
       </div>
       <div className="text-on-surface-variant font-label-sm text-[10px] border-t border-surface-container-highest pt-1.5">{footer}</div>
     </div>

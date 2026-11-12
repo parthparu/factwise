@@ -11,11 +11,18 @@ const NAV = [
   { href: "/admin", label: "Admin Bed Census & KPI Benchmark" },
 ];
 
+const ROLE_PERSONA: Record<string, { name: string; sub: string }> = {
+  Nurse: { name: "Nurse (you)", sub: "Ward Round · RN" },
+  Doctor: { name: "Dr. (you)", sub: "Attending Physician" },
+  Admin: { name: "Admin (you)", sub: "Facility Operations" },
+};
+
 export default function Header({ role }: { role: string }) {
   const pathname = usePathname();
   const { patients } = useStore();
   const occ = occupancyStats(patients);
   const activePages = patients.flatMap((p) => p.pages.filter((pg) => pg.status === "paging"));
+  const persona = ROLE_PERSONA[role] ?? { name: role, sub: "" };
 
   return (
     <header className="sticky top-0 left-0 w-full z-50 bg-white/95 backdrop-blur-md border-b border-surface-container-highest shadow-sm">
@@ -42,6 +49,17 @@ export default function Header({ role }: { role: string }) {
                 </div>
               </div>
             </div>
+            <div className="hidden lg:block h-7 w-px bg-surface-container-highest" />
+            <div className="hidden lg:flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                <span className="font-label-sm text-[11px] text-on-surface font-bold uppercase tracking-wider">Live Monitoring</span>
+              </div>
+              <div className="flex items-center gap-1 font-label-sm text-[12px] text-on-surface-variant">
+                <span className="material-symbols-outlined text-[15px] text-tertiary">schedule</span>
+                <span>Shift: 07:00 – 19:00</span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             {activePages.length > 0 && (
@@ -56,9 +74,14 @@ export default function Header({ role }: { role: string }) {
                 </span>
               </Link>
             )}
-            <div className="hidden sm:flex px-2.5 py-1 rounded-lg bg-secondary-container text-on-secondary-container font-label-sm text-[12px] font-semibold items-center gap-1">
-              <span className="material-symbols-outlined text-[16px]">badge</span>
-              <span>{role}</span>
+            <div className="hidden sm:flex items-center gap-2 pl-1">
+              <div className="text-right">
+                <div className="font-label-md text-[13px] text-on-surface font-bold leading-tight">{persona.name}</div>
+                <div className="font-label-sm text-[10px] text-on-surface-variant">{persona.sub}</div>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                <span className="material-symbols-outlined text-[18px]">person</span>
+              </div>
             </div>
             <Link
               href="/"
@@ -87,6 +110,10 @@ export default function Header({ role }: { role: string }) {
               );
             })}
           </nav>
+          <div className="hidden md:flex items-center gap-1.5 font-label-sm text-[11px] text-on-surface-variant flex-shrink-0">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span>Sub-station 2 Connected</span>
+          </div>
         </div>
       </div>
     </header>
