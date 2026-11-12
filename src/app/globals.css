@@ -72,6 +72,18 @@ body {
   color: var(--color-on-surface);
 }
 
+/* Self-hosted so icons don't depend on fonts.gstatic.com being reachable
+   at runtime (ad blockers / privacy extensions / restrictive networks
+   commonly block Google's font CDN, which silently falls back to raw
+   ligature text like "arrow_forward" instead of the glyph). */
+@font-face {
+  font-family: "Material Symbols Outlined";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url("/fonts/material-symbols-outlined.woff2") format("woff2");
+}
+
 .material-symbols-outlined {
   font-family: "Material Symbols Outlined";
   font-weight: normal;
