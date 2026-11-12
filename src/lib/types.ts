@@ -49,6 +49,7 @@ export type Patient = {
   bed: string;
   assignedDoctor: string;
   admittedDate: string;
+  admissionNotes?: string;
   status: PatientStatus;
   dischargedDate?: string;
   vitals: VitalsReading[];

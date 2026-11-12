@@ -104,7 +104,10 @@ function seedPatients(): Patient[] {
 
 type Store = {
   patients: Patient[];
-  addPatient: (p: Omit<Patient, "id" | "vitals" | "visits" | "pages" | "status">) => void;
+  addPatient: (
+    p: Omit<Patient, "id" | "vitals" | "visits" | "pages" | "status">,
+    initialVitals?: Omit<VitalsReading, "id">
+  ) => void;
   addVitals: (
     patientId: string,
     reading: Omit<VitalsReading, "id">,
@@ -150,10 +153,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const api = useMemo<Store>(
     () => ({
       patients,
-      addPatient: (p) =>
+      addPatient: (p, initialVitals) =>
         setPatients((prev) => [
           ...prev,
-          { ...p, id: uid(), status: "active", vitals: [], visits: [], pages: [] },
+          {
+            ...p,
+            id: uid(),
+            status: "active",
+            vitals: initialVitals ? [{ ...initialVitals, id: uid() }] : [],
+            visits: [],
+            pages: [],
+          },
         ]),
       addVitals: (patientId, reading, page) =>
         setPatients((prev) =>

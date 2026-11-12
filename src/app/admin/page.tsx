@@ -225,6 +225,12 @@ export default function AdminPage() {
                       {latestVitals(selectedOccupant)!.hr ?? "—"} bpm
                     </div>
                   )}
+                  {selectedOccupant.admissionNotes && (
+                    <div className="p-2.5 rounded-lg bg-surface-container-low text-[12px] text-on-surface-variant">
+                      <span className="font-bold text-on-surface">Admission notes: </span>
+                      {selectedOccupant.admissionNotes}
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2 pt-1">
                     {selectedOccupant.status === "discharge_pending" && (
                       <button
@@ -317,8 +323,18 @@ export default function AdminPage() {
           patients={patients}
           initialBed={admitBed}
           onClose={() => setShowAdmit(false)}
-          onSubmit={(p) => {
-            addPatient(p);
+          onSubmit={(p, initialTempF) => {
+            addPatient(
+              p,
+              initialTempF != null
+                ? {
+                    date: todayStr(),
+                    time: new Date().toTimeString().slice(0, 5),
+                    tempF: initialTempF,
+                    recordedBy: "Admin (you)",
+                  }
+                : undefined
+            );
             setSelectedBed(parseInt(p.bed, 10) || selectedBed);
             setShowAdmit(false);
           }}
@@ -403,26 +419,33 @@ function AdmitModal({
   patients: Patient[];
   initialBed?: string;
   onClose: () => void;
-  onSubmit: (p: Omit<Patient, "id" | "vitals" | "visits" | "pages" | "status">) => void;
+  onSubmit: (p: Omit<Patient, "id" | "vitals" | "visits" | "pages" | "status">, initialTempF?: number) => void;
 }) {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [sex, setSex] = useState<"Female" | "Male" | "Other">("Female");
   const [bed, setBed] = useState(initialBed ?? "");
   const [assignedDoctor, setAssignedDoctor] = useState("");
+  const [admissionNotes, setAdmissionNotes] = useState("");
+  const [initialTemp, setInitialTemp] = useState("");
 
   const ageNum = parseInt(age, 10);
+  const tempNum = initialTemp ? parseFloat(initialTemp) : undefined;
   const errors: string[] = [];
   if (!name.trim()) errors.push("Name is required.");
   if (!age || Number.isNaN(ageNum) || ageNum <= 0) errors.push("Enter a valid age.");
   if (!bed.trim()) errors.push("Bed number is required.");
   if (bed.trim() && bedTaken(patients, bed.trim())) errors.push("That bed is already occupied.");
   if (!assignedDoctor.trim()) errors.push("Assigned doctor is required.");
+  if (initialTemp && (Number.isNaN(tempNum) || tempNum! < 90 || tempNum! > 110)) {
+    errors.push("Initial temperature must be a realistic value between 90°F and 110°F.");
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h3 className="font-bold text-lg mb-4">Admit new patient</h3>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 max-h-[90vh] overflow-y-auto">
+        <h3 className="font-bold text-lg mb-1">Admit new patient</h3>
+        <p className="text-xs text-on-surface-variant mb-4">Patient intake — assigns a bed and opens a chart.</p>
 
         <Field label="Name">
           <input value={name} onChange={(e) => setName(e.target.value)} className="input" />
@@ -443,6 +466,25 @@ function AdmitModal({
         <Field label="Assigned doctor">
           <input value={assignedDoctor} onChange={(e) => setAssignedDoctor(e.target.value)} className="input" placeholder="Dr. ..." />
         </Field>
+        <Field label="Initial temperature (°F) — optional">
+          <input
+            type="number"
+            step="0.1"
+            value={initialTemp}
+            onChange={(e) => setInitialTemp(e.target.value)}
+            className="input"
+            placeholder="e.g. 99.1"
+          />
+        </Field>
+        <Field label="Admission notes / symptoms — optional">
+          <textarea
+            value={admissionNotes}
+            onChange={(e) => setAdmissionNotes(e.target.value)}
+            rows={2}
+            className="w-full border border-surface-container-highest rounded-lg px-3 py-2 text-sm"
+            placeholder="Reason for admission, presenting symptoms..."
+          />
+        </Field>
 
         {errors.length > 0 && (
           <ul className="text-xs text-error mt-2 list-disc list-inside">
@@ -459,14 +501,18 @@ function AdmitModal({
           <button
             disabled={errors.length > 0}
             onClick={() =>
-              onSubmit({
-                name: name.trim(),
-                age: ageNum,
-                sex,
-                bed: bed.trim(),
-                assignedDoctor: assignedDoctor.trim(),
-                admittedDate: todayStr(),
-              })
+              onSubmit(
+                {
+                  name: name.trim(),
+                  age: ageNum,
+                  sex,
+                  bed: bed.trim(),
+                  assignedDoctor: assignedDoctor.trim(),
+                  admittedDate: todayStr(),
+                  admissionNotes: admissionNotes.trim() || undefined,
+                },
+                tempNum
+              )
             }
             className="flex-1 px-3 py-2 rounded-lg bg-primary text-white disabled:opacity-40"
           >
